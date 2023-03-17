@@ -107,6 +107,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -131,10 +132,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="model.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\code\vscode\tinyraytracer-homework_assignment\stb_image.h" />
     <ClInclude Include="..\..\..\code\vscode\tinyraytracer-homework_assignment\stb_image_write.h" />
+    <ClInclude Include="material.hpp" />
+    <ClInclude Include="model.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

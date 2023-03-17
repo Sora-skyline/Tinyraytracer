@@ -18,12 +18,21 @@
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="model.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\code\vscode\tinyraytracer-homework_assignment\stb_image_write.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\code\vscode\tinyraytracer-homework_assignment\stb_image.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="model.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="material.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

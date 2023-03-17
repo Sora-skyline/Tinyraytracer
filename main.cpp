@@ -3,6 +3,8 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include "Model.hpp"
+#include "material.hpp"
 #include <eigen3/Eigen/Eigen>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -12,15 +14,12 @@ using namespace Eigen;
 #define M_PI 3.14159265358979323846
 int envmap_width, envmap_height;
 
-
 std::vector<Vector3f> envmap;
 // 角度转弧度
 inline float deg2rad(const float& deg)
 {
     return deg * M_PI / 180.0;
 }
-
-
 // 反射光线
 inline Vector3f reflect(const Vector3f& I, const Vector3f& N)
 {
@@ -43,15 +42,6 @@ struct  Light {
     Light(const Vector3f& p, const float& i) : position(p), intensity(i) {}
     Vector3f position;
     float intensity;
-};
-struct Material {
-    Material(const float &ior, const Vector4f & alb ,const Vector3f& color, const float &exp, const std::string &type) :refractive_index(ior), albedo(alb), diffuse_color(color), specular_exponent(exp), type(type){}
-    Material() : refractive_index(1), albedo(1, 0, 0, 0), diffuse_color(), specular_exponent(), type() {}
-    float refractive_index;
-    Vector4f albedo; //（漫反射率， 高光反射率，镜面反射率, 透光率）
-    Vector3f diffuse_color;//  物体颜色
-    float specular_exponent;// 高光的幂次
-    std::string type;
 };
 
 struct Sphere {
@@ -91,10 +81,12 @@ struct Plane {
         return false;
     }
 };
+
 struct Object {
     Object(){};
     std::vector<Sphere> spheres;
     Plane plane;
+    Model model;
 };
 //和所有物体判断相交
 bool intersect(const Vector3f& orig, const Vector3f& dir, const Object&object, Vector3f &hit, Vector3f & normal, Material& material) {
@@ -111,13 +103,26 @@ bool intersect(const Vector3f& orig, const Vector3f& dir, const Object&object, V
     }
     // 棋盘平面
     auto plane = object.plane;
-    float t  = 0;
+    float t  = tmin;
     if (plane.ray_intersect(orig, dir, t) && t < tmin) {
         tmin = t;
         hit = orig +dir * t;
         normal = Vector3f(0, 1, 0);
         //material = plane.material;
         material.diffuse_color = (int(.5 * hit.x() + 1000) + int(.5 * hit.z())) & 1 ? Vector3f(.3, .3, .3) : Vector3f(.3, .2, .1);
+    }
+     //obj模型
+    Model model = object.model;
+     t = tmin;
+    uint32_t index = 0;
+    Vector2f uv; 
+    Vector3f n = { 0,0,0 };
+    if (model.ray_intersect(orig, dir, t, index, uv, n) && t < tmin) {
+        //std::cout << "ray_intersect";
+        tmin = t;
+        hit = orig + dir * t;
+        normal = n.normalized();
+        material = model.material;
     }
     return tmin < 1000;
 }
@@ -126,10 +131,11 @@ Vector3f castRay(const Vector3f &orig,const  Vector3f &dir, const Object&object,
     Material material;
     Vector3f hit, normal;
 
-    if (depth> 4 || !intersect(orig, dir, object, hit, normal, material)) {
+    if (depth> 10 || !intersect(orig, dir, object, hit, normal, material)) {
         int x = std::max(0, std::min(envmap_width - 1, static_cast<int>((atan2(dir.z(), dir.x()) / (2 * M_PI) + .5) * envmap_width)));
         int y = std::max(0, std::min(envmap_height - 1, static_cast<int>(acos(dir.y()) / M_PI * envmap_height)));
         return envmap[x + y * envmap_width];
+        //return Vector3f(0.7937, 0.7937, 0.7937);
     }
     Eigen::Vector3f kd = material.diffuse_color;
     Eigen::Vector3f ks = Eigen::Vector3f(0.7937, 0.7937, 0.7937);
@@ -196,26 +202,26 @@ inline void UpdateProgress(float progress)
 }
 void render(Object object, std::vector<Light> lights) {
     const int width = 1024, height = 760;
-    const float fov = 60;
-    const Vector3f eye_pos = { 0,0,0 };
+    const float fov = 90;
+    const Vector3f eye_pos = {3,2,4};
     float scale = std::tan(deg2rad(fov * 0.5f));
     float imageAspectRatio = width / (float)height;
     std::vector<Vector3f> framebuffer(width * height);
+    int cnt = 0;
     #pragma omp parallel for
-    for (int j = 0; j < height; j++) {
+    for (int j = 0; j < height;  j++) {
         for (int i = 0; i < width; i++) {
-            float x;
-            float y;
-            x = -0.5 + (1.0 * i - 0.5) / width;
-            y = 0.5 - (1.0 * j + 0.5) / height;
-            x *= 2 * imageAspectRatio * scale;
-            y *= 2 * scale;
+            float dir_x = (i + 0.5f) - width / 2.f;
+            float dir_y = -(j + 0.5f) + height / 2.f; 
+            float dir_z = -height / (2.0f * tan(fov / 2.f));
 
-            Vector3f dir = Vector3f(x, y, -1); 
+            Vector3f dir = Vector3f(dir_x, dir_y, dir_z);
             dir = dir.normalized();
             framebuffer[i + j * width] = castRay(eye_pos, dir, object, lights, 0);
         }
-        UpdateProgress(j / (float)height);
+        std::cout <<cnt++/ (float)height<< '\n';
+        //if (cnt > 500)break;
+        //UpdateProgress(j / (float)height);
     }
 
     std::vector<unsigned char> pixmap(width * height * 3);
@@ -250,16 +256,19 @@ int main() {
     std::vector<Light>lights;
     Material      glass          (1.5, {0.0, 0.5, 0.1, 0.8}, Vector3f(0.6, 0.7, 0.8 ), 125., "glass");
     Material      ivory          (1.0, {0.6, 0.3, 0.1, 0.0}, Vector3f(0.4, 0.4, 0.3), 200, "ivory");
-    Material      rubber(1.0, {0.9, 0.1, 0.0, 0.0}, Vector3f(0.3, 0.1, 0.1), 100, "rubber");
+    Material      rubber       (1.0, {0.9, 0.1, 0.0, 0.0}, Vector3f(0.3, 0.1, 0.1), 100, "rubber");
     Material      mirror        (1.0, {0.0, 10, 0.8, 0.0}, Vector3f(1.0, 1.0, 1.0), 1425, "mirror");
     std::vector<Sphere> spheres;
     object.spheres.push_back(Sphere(Vector3f(-3, 0, -16),        2, rubber));
     object.spheres.push_back(Sphere(Vector3f(-1.0, -1.5, -12), 2, glass));
     object.spheres.push_back(Sphere(Vector3f(1.5, -0.5, -18),  3, rubber));
     object.spheres.push_back(Sphere(Vector3f(7, 5, -18),         4, mirror));
-    //object.plane = Plane({ -10, -4, -10 }, { 10,-4, -30}, ivory);
-    lights.push_back(Light(Vector3f(-20, 20, 20), 2));
 
+    object.model = Model("tri.obj", glass);
+    object.plane = Plane({ -10, -4, -10 }, { 10,-4, -30}, ivory);
+    lights.push_back(Light(Vector3f(-20, 20, 20), 2));
+    lights.push_back(Light(Vector3f(30, 50, -25), 1.8));
+    lights.push_back(Light(Vector3f(30, 20, 30), 1.7));
     
     render(object, lights );
     return 0;
